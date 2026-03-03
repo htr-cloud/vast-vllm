@@ -32,5 +32,9 @@ RUN pip install --no-cache-dir --upgrade pip wheel setuptools && \
     pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 && \
     pip install --no-cache-dir vllm fastapi uvicorn
 
+ENV HF_HOME=/opt/vllm/hf_cache
+ENV TRITON_CACHE_DIR=/opt/vllm/triton_cache
+RUN mkdir -p $HF_HOME $TRITON_CACHE_DIR
+
 # 5. Container am Leben halten und SSH starten
 CMD ["/bin/bash", "-c", "/usr/sbin/sshd && sleep infinity"]
