@@ -1,10 +1,13 @@
-# Basis: Ubuntu 22.04 mit vorinstalliertem CUDA 12.4 Toolkit
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
-# Verhindert interaktive Prompts während der apt-Installation
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV VIRTUAL_ENV=/opt/vllm
+ENV PATH="/opt/vllm/bin:$PATH"
+ENV HF_HOME=/opt/vllm/hf_cache
+ENV TRITON_CACHE_DIR=/opt/vllm/triton_cache
+ENV PYTORCH_ALLOC_CONF=expandable_segments:True
 
-# 1. System-Abhängigkeiten installieren
 RUN apt-get update -y && apt-get install -y \
     python3 \
     python3-pip \
@@ -14,27 +17,22 @@ RUN apt-get update -y && apt-get install -y \
     wget \
     git \
     openssh-server \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. SSH für Vast.ai vorbereiten
-RUN mkdir /var/run/sshd && \
+RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
-# 3. Python venv erstellen und in den PATH laden
-ENV VIRTUAL_ENV=/opt/vllm
-RUN python3 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN python3 -m venv $VIRTUAL_ENV && \
+    pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir vllm
 
-# 4. vLLM und Agent-Abhängigkeiten installieren
-# Wir nutzen den CUDA 12.4 Index für PyTorch, um Kompatibilität zu garantieren
-RUN pip install --no-cache-dir --upgrade pip wheel setuptools && \
-    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 && \
-    pip install --no-cache-dir vllm fastapi uvicorn
+RUN mkdir -p $HF_HOME $TRITON_CACHE_DIR /app
 
-ENV HF_HOME=/opt/vllm/hf_cache
-ENV TRITON_CACHE_DIR=/opt/vllm/triton_cache
-RUN mkdir -p $HF_HOME $TRITON_CACHE_DIR
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
-# 5. Container am Leben halten und SSH starten
-CMD ["/bin/bash", "-c", "/usr/sbin/sshd && sleep infinity"]
+EXPOSE 22 8000
+
+CMD ["/app/start.sh"]
